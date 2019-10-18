@@ -14,6 +14,7 @@ data_size = 100
 # Device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(device)
+print(torch.cuda.is_available())
 
 # Make a dummy (random) dataset. You just need to implement the getitem
 class RandomDataset(Dataset):

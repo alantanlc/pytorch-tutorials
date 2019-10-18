@@ -1,0 +1,11 @@
+cuda
+True
+	In Model: input size torch.Size([30, 5]) output size torch.Size([30, 2])
+Outside: input size torch.Size([30, 5]) output_size torch.Size([30, 2])
+	In Model: input size torch.Size([30, 5]) output size torch.Size([30, 2])
+Outside: input size torch.Size([30, 5]) output_size torch.Size([30, 2])
+	In Model: input size torch.Size([30, 5]) output size torch.Size([30, 2])
+Outside: input size torch.Size([30, 5]) output_size torch.Size([30, 2])
+	In Model: input size torch.Size([10, 5]) output size torch.Size([10, 2])
+Outside: input size torch.Size([10, 5]) output_size torch.Size([10, 2])
+Completed
