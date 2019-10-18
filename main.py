@@ -1,126 +1,67 @@
-from __future__ import print_function, division
-import os
+# Reference: https://pytorch.org/tutorials/beginner/blitz/data_parallel_tutorial.html#dummy-dataset
+
+# Import PyTorch modules and define parameters
 import torch
-import pandas as pd
-from skimage import io, transform
-import numpy as np
-import matplotlib.pyplot as plt
+import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
-from torchvision import transforms, utils
-# Ignore warnings
-import warnings
-warnings.filterwarnings("ignore")
 
-class FaceLandmarksDataset(Dataset):
-    """Face Landmarks dataset."""
+# Parameters and DataLoaders
+input_size = 5
+output_size = 2
+batch_size = 30
+data_size = 100
 
-    def __init__(self, csv_file, root_dir, transform=None):
-        """
-        Args:
-            csv_file (string): Path to the csv file with annotations.
-            root_dir (string): Directory with all the images.
-            transform (callable, optional): Optional transform to be applied on a sample.
-        """
-        self.landmarks_frame = pd.read_csv(csv_file)
-        self.root_dir = root_dir
-        self.transform = transform
+# Device
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+# Make a dummy (random) dataset. You just need to implement the getitem
+class RandomDataset(Dataset):
+
+    def __init__(self, size, length):
+        self.len = length
+        self.data = torch.randn(length, size)
+
+    def __getitem__(self, index):
+        return self.data[index]
 
     def __len__(self):
-        return len(self.landmarks_frame)
+        return self.len
 
-    def __getitem__(self, idx):
-        if torch.is_tensor(idx):
-            idx = idx.tolist()
+rand_loader = DataLoader(dataset=RandomDataset(input_size, data_size), batch_size=batch_size, shuffle=True)
 
-            img_name = os.path.join(self.root_dir, self.landmarks_frame.iloc[idx, 0])
+# Implement a model that takes an input, performs a linear operation, and gives an output.
+class Model(nn.Module):
 
-            image = io.imread(img_name)
-            landmarks = self.landmarks_frame.iloc[idx, 1:]
-            landmarks = np.array([landmarks])
-            landmarks = landmarks.astype('float').reshape(-1, 2)
-            sample = {'image': image, 'landmarks': landmarks}
+    # Our model
 
-            if self.transform:
-                sample = self.transform(sample)
+    def __init__(self, input_size, output_size):
+        super(Model, self).__init__()
+        self.fc = nn.Linear(input_size, output_size)
 
-            return sample
+    def forward(self, input):
+        output = self.fc(input)
+        print("\tIn Model: input size", input.size(), "output size", output.size())
 
-class Rescale(object):
-    """ Rescale the image in a sample to a given size.
+        return output
 
-    Args:
-        output_size (tuple or int): Desired output size. If tuple, output is matched to output_size. If int, smaller of image edges is matched to output_size keeping aspect ratio the same.
-    """
+# Create Model and DataParallel
+# First, we make a model instance and check if we have multiple GPUs.
+# If we have multiple GPUs, we can wrap our model using nn.DataParallel.
+# Then we can put our model on GPUs by mode.to(device)
+model = Model(input_size, output_size)
+if torch.cuda.device_count() > 1:
+    print("Let's use", torch.cuda.device_count(), "GPUs!")
+    # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
+    model = nn.DataParallel(model)
+model.to(device)
 
-    def __init__(self, output_size):
-        assert isinstance(output_size, (int, tuple))
-        self.output_size = output_size
+# Run the Model: Now we can see the sizes of input and output tensors.
+for data in rand_loader:
+    input = data.to(device)
+    output = model(input)
+    print("Outside: input size", input.size(), "output_size", output.size())
 
-    def __call__(self, sample):
-        image, landmarks = sample['image'], sample['landmarks']
-
-        h, w = image.shape[:2]
-        if isinstance(self.output_size, int):
-            if h > w:
-                new_h, new_w = self.output_size * h / w, self.output_size
-            else:
-                new_h, new_w = self.output_size, self.output_size * w / h
-        else:
-            new_h, new_w = self.output_size
-
-        new_h, new_w = int(new_h), int(new_w)
-
-        img = transform.resize(image, (new_h, new_w))
-
-        # h and w are swapped for landmarks because for images,
-        # x and y axes are axis 1 and 0 respectively
-        landmarks = landmarks * [new_w / w, new_h / h]
-
-        return {'image': img, 'landmarks': landmarks}
-
-def show_landmarks(image, landmarks):
-    """Show image with landmarks"""
-    plt.imshow(image)
-    plt.scatter(landmarks[:, 0], landmarks[:, 1], s=10, marker='.', c='r')
-    plt.pause(0.001) # pause a bit so that plots are updated
-
-plt.ion()   # interactive mode
-
-landmarks_frame = pd.read_csv('data/faces/face_landmarks.csv')
-
-n = 65
-img_name = landmarks_frame.iloc[n, 0]
-landmarks = landmarks_frame.iloc[n, 1:].as_matrix()
-landmarks = landmarks.astype('float').reshape(-1, 2)
-
-print('Image name: {}'.format(img_name))
-print('Landmarks shape: {}'.format(landmarks.shape))
-print('First 4 Landmarks: {}'.format(landmarks[:4]))
-
-plt.figure()
-show_landmarks(io.imread(os.path.join('data/faces/', img_name)), landmarks)
-plt.show()
-
-face_dataset = FaceLandmarksDataset(csv_file = 'data/faces/face_landmarks.csv', root_dir = 'data/faces/')
-
-fig = plt.figure()
-
-for i in range(len(face_dataset)):
-    sample = face_dataset[i]
-
-    print(i, sample['image'].shape, sample['landmarks'].shape)
-
-    ax = plt.subplot(1, 4, i+1)
-    plt.tight_layout()
-    ax.set_title('Sample #{}'.format(i))
-    ax.axis('off')
-    show_landmarks(**sample)
-
-    if i == 3:
-        plt.show()
-        break
-
-tsfm = Transform(params)
-transformed_sample = tsfm(sample)
-
-print('End of program')
+# Results
+# If you have no GPU or one GPU, when we batch 30 inputs and 30 outputs,
+# the model gets 30 and outputs 30 as expected.
+# But if you have multiple GPUs, then you can get results like this (refer to bottom of page of the following reference link).
