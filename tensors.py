@@ -6,8 +6,8 @@ x = torch.empty(5, 3)
 print(x)
 
 # Construct a randomly initialized matrix
-x = torch.rand(5, 3)
-print(x)
+y = torch.rand(5, 3, requires_grad=True)
+print(y)
 
 # Construct a matrix filled zeros and of dtype long
 x = torch.zeros(5, 3, dtype=torch.long)
